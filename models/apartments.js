@@ -1,24 +1,39 @@
 import mongoose from "mongoose";
 
-const ApartmentSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-  },
-  address: {
-    type: String,
-    required: true,
-  },
-  additionalWashRates: {
-    foam: {
-      type: Number,
-      default: 0,
+const ApartmentSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
     },
-    normal: {
-      type: Number,
-      default: 0,
+    address: {
+      type: String,
+      required: true,
+    },
+    additionalWashRates: {
+      car: {
+        foam: {
+          type: Number,
+          default: 0,
+        },
+        normal: {
+          type: Number,
+          default: 0,
+        },
+      },
+      bike: {
+        foam: {
+          type: Number,
+          default: 0,
+        },
+        normal: {
+          type: Number,
+          default: 0,
+        },
+      },
     },
   },
-}, { timestamps: true });
+  { timestamps: true }
+);
 
 export default mongoose.model("Apartment", ApartmentSchema);

@@ -5,12 +5,22 @@ const router = express.Router();
 
 // GET all apartments
 router.get('/', async (req, res) => {
-  console.log('');
   try {
     const apartments = await Apartment.find();
     res.json(apartments);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const apartment = await Apartment.findById(req.params.id);
+    res.json(apartment);
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    })
   }
 });
 

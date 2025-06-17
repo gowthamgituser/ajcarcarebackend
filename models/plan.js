@@ -27,6 +27,9 @@ const PlanSchema = new mongoose.Schema({
   description: {
     type: String,
   },
+  vehicleType: {
+    type: Number,
+  }
 }, { timestamps: true });
 
 export default mongoose.model("Plan", PlanSchema);
