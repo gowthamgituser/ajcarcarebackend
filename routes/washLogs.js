@@ -13,6 +13,7 @@ router.post('/', async (req, res) => {
       subscriptionId,
       apartmentId,
       customerId,
+      description,
       vehicleId,
       reduceQuota = true,
       isAdditional: forceAdditional = false,
@@ -20,16 +21,22 @@ router.post('/', async (req, res) => {
     } = req.body;
 
     // Fetch subscription
-    const subscription = await Subscription.findById(subscriptionId);
-    if (!subscription) return res.status(404).json({ error: 'Subscription not found' });
+    let subscription;
+    let plan;
+    if (subscriptionId) {
+      subscription = await Subscription.findById(subscriptionId);
+      if (!subscription) return res.status(404).json({ error: 'Subscription not found' });
+    }
 
     // Fetch apartment
     const apartment = await Apartment.findById(apartmentId);
     if (!apartment) return res.status(404).json({ error: 'Apartment not found' });
 
     // Fetch plan via subscription.planId
-    const plan = await Plan.findById(subscription.planId);
-    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+    if(subscriptionId) {
+      plan = await Plan.findById(subscription.planId);
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+    }
 
     // Optional vehicle check
     if (vehicleId) {
@@ -90,6 +97,7 @@ router.post('/', async (req, res) => {
       vehicleId: vehicleId || null,
       type,
       isAdditional,
+      description,
       additionalCharge: finalAdditionalCharge,
       performedBy: req.user?._id // optional if you have auth
     });
