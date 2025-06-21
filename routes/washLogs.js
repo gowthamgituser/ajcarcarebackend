@@ -1,52 +1,71 @@
 import express from 'express';
 import Subscription from '../models/subscription.js';
-import apartments from '../models/apartments.js';
+import Apartment from '../models/apartments.js';
 import WashLog from '../models/washLogs.js'
-
+import Vehicle from '../models/vehicle.js';
+import Plan from '../models/plan.js'
 const router = express.Router();
 
-// Create a new wash log
 router.post('/', async (req, res) => {
-    try {
-      const { type, subscriptionId, apartmentId } = req.body;
-  
-      const subscription = await Subscription.findById(subscriptionId);
-      if (!subscription) {
-        return res.status(404).json({ error: 'Subscription not found' });
-      }
-  
-      // Defaults
-      let isAdditional = false;
-      let additionalCharge = 0;
-  
-      const used = subscription.washesUsed[type];
-      const quota = subscription.washQuota[type];
-  
+  try {
+    const {
+      type,
+      subscriptionId,
+      apartmentId,
+      customerId,
+      vehicleId,
+      reduceQuota = true,
+      isAdditional: forceAdditional = false,
+      additionalCharge = 0
+    } = req.body;
+
+    // Fetch subscription
+    const subscription = await Subscription.findById(subscriptionId);
+    if (!subscription) return res.status(404).json({ error: 'Subscription not found' });
+
+    // Fetch apartment
+    const apartment = await Apartment.findById(apartmentId);
+    if (!apartment) return res.status(404).json({ error: 'Apartment not found' });
+
+    // Fetch plan via subscription.planId
+    const plan = await Plan.findById(subscription.planId);
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+    // Optional vehicle check
+    if (vehicleId) {
+      const vehicle = await Vehicle.findById(vehicleId);
+      if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
+    }
+
+    let isAdditional = false;
+    let finalAdditionalCharge = 0;
+
+    if (forceAdditional) {
+      // Always mark as additional
+      isAdditional = true;
+      finalAdditionalCharge = additionalCharge || 0;
+
+    } else if (reduceQuota) {
+      const used = subscription.washesUsed[type] || 0;
+      const quota = plan.washQuota[type] || 0;
+
       if (used >= quota) {
-        // Handle additional wash
         isAdditional = true;
-  
-        const apartment = await apartments.findById(apartmentId);
-        if (!apartment) {
-          return res.status(404).json({ error: 'Apartment not found' });
-        }
-  
-        additionalCharge = apartment.additionalWashRates[type] || 0;
+        finalAdditionalCharge = additionalCharge || 0;
       } else {
-        // Increment usage
+        // Deduct from subscription usage
         const updateField = `washesUsed.${type}`;
         await Subscription.findByIdAndUpdate(subscriptionId, {
           $inc: { [updateField]: 1 }
         });
-  
-        // Refetch updated subscription
+
+        // Check for expiry after usage
         const updatedSub = await Subscription.findById(subscriptionId);
-  
-        const foamUsed = updatedSub.washesUsed.foam;
-        const foamQuota = updatedSub.washQuota.foam;
-        const normalUsed = updatedSub.washesUsed.normal;
-        const normalQuota = updatedSub.washQuota.normal;
-  
+        const foamUsed = updatedSub.washesUsed.foam || 0;
+        const foamQuota = plan.washQuota.foam || 0;
+        const normalUsed = updatedSub.washesUsed.normal || 0;
+        const normalQuota = plan.washQuota.normal || 0;
+
         if (
           foamUsed >= foamQuota &&
           normalUsed >= normalQuota &&
@@ -56,22 +75,33 @@ router.post('/', async (req, res) => {
           await updatedSub.save();
         }
       }
-  
-      // Save wash log
-      const washLog = new WashLog({
-        ...req.body,
-        isAdditional,
-        additionalCharge
-      });
-  
-      const saved = await washLog.save();
-      res.status(201).json(saved);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
+
+    } else {
+      // Do not reduce quota, treat as additional
+      isAdditional = true;
+      finalAdditionalCharge = additionalCharge || 0;
     }
-  });
-  
+
+    // Create the wash log
+    const washLog = new WashLog({
+      customerId,
+      subscriptionId,
+      apartmentId,
+      vehicleId: vehicleId || null,
+      type,
+      isAdditional,
+      additionalCharge: finalAdditionalCharge,
+      performedBy: req.user?._id // optional if you have auth
+    });
+
+    const saved = await washLog.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
   
 // Get all wash logs
 router.get('/', async (req, res) => {
