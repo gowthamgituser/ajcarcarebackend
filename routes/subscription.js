@@ -52,10 +52,10 @@ router.get('/', async (req, res) => {
   // Get subscription by customer ID
   router.get('/customer/:id', async (req, res) => {
     try {
-      const sub = await Subscription.findOne({ customerId: req.params.id })
+      const sub = await Subscription.find({ customerId: req.params.id })
         .populate('planId')
         .populate('vehicleIds');
-      if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+      if (!sub) return res.status(200).json({ error: 'Subscription not found' });
       res.json(sub);
     } catch (err) {
       res.status(500).json({ error: err.message });
