@@ -4,6 +4,7 @@ import Apartment from '../models/apartments.js';
 import WashLog from '../models/washLogs.js'
 import Vehicle from '../models/vehicle.js';
 import Plan from '../models/plan.js'
+import mongoose from 'mongoose';
 const router = express.Router();
 
 router.post('/', async (req, res) => {
@@ -33,16 +34,16 @@ router.post('/', async (req, res) => {
     if (!apartment) return res.status(404).json({ error: 'Apartment not found' });
 
     // Fetch plan via subscription.planId
-    if(subscriptionId) {
+    if (subscriptionId) {
       plan = await Plan.findById(subscription.planId);
       if (!plan) return res.status(404).json({ error: 'Plan not found' });
     }
 
     // Optional vehicle check
-    if (vehicleId) {
-      const vehicle = await Vehicle.findById(vehicleId);
-      if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
-    }
+    // if (vehicleId) {
+    //   const vehicle = await Vehicle.findById(vehicleId);
+    //   if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
+    // }
 
     let isAdditional = false;
     let finalAdditionalCharge = 0;
@@ -110,7 +111,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-  
+
 // Get all wash logs
 router.get('/', async (req, res) => {
   try {
@@ -131,8 +132,27 @@ router.get('/apartment/:apartmentId', async (req, res) => {
   try {
     const logs = await WashLog.find({ apartmentId: req.params.apartmentId })
       .populate('customerId')
-      .populate('vehicleId');
-    res.json(logs);
+      .sort({ createdAt: -1 }) // sort by latest createdAt
+      .lean(); // makes docs plain objects
+
+    // Process vehicleId manually
+    const populatedLogs = await Promise.all(
+      logs.map(async (log) => {
+        if (mongoose.Types.ObjectId.isValid(log.vehicleId)) {
+          try {
+            const vehicle = await Vehicle.findById(log.vehicleId).lean();
+            if (vehicle) {
+              log.vehicleId = vehicle; // replace with full vehicle object
+            }
+          } catch (err) {
+            // fail silently; leave vehicleId as is
+          }
+        }
+        return log;
+      })
+    );
+
+    res.json(populatedLogs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,185 +183,195 @@ GET /api/washlogs?customerId=abc123
 GET /api/washlogs?vehicleId=xyz456
  */
 router.get('/', async (req, res) => {
-    try {
-      const { date, from, to, customerId, apartmentId, vehicleId } = req.query;
-  
-      const filter = {};
-  
-      if (date) {
-        const targetDate = new Date(date);
-        const nextDay = new Date(targetDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        filter.date = { $gte: targetDate, $lt: nextDay };
-      }
-  
-      if (from && to) {
-        const start = new Date(from);
-        const end = new Date(to);
-        filter.date = { $gte: start, $lte: end };
-      }
-  
-      if (customerId) filter.customerId = customerId;
-      if (apartmentId) filter.apartmentId = apartmentId;
-      if (vehicleId) filter.carId = vehicleId;
-  
-      const logs = await WashLog.find(filter)
-        .populate('customerId')
-        .populate('subscriptionId')
-        .populate('apartmentId')
-        .populate('vehicleId')
-  
-      res.json(logs);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
+  try {
+    const { date, from, to, customerId, apartmentId, vehicleId } = req.query;
+
+    const filter = {};
+
+    if (date) {
+      const targetDate = new Date(date);
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      filter.date = { $gte: targetDate, $lt: nextDay };
     }
-  });
-  
-  // DELETE /washlogs/:id
+
+    if (from && to) {
+      const start = new Date(from);
+      const end = new Date(to);
+      filter.date = { $gte: start, $lte: end };
+    }
+
+    if (customerId) filter.customerId = customerId;
+    if (apartmentId) filter.apartmentId = apartmentId;
+    if (vehicleId) filter.carId = vehicleId;
+
+    const logs = await WashLog.find(filter)
+      .populate('customerId')
+      .populate('subscriptionId')
+      .populate('apartmentId')
+      .populate('vehicleId')
+
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
-    try {
-      const deleted = await WashLog.findByIdAndDelete(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: 'WashLog not found' });
+  try {
+    const washLogId = req.params.id;
+
+    // Step 1: Find the wash log
+    const log = await WashLog.findById(washLogId);
+    if (!log) return res.status(404).json({ error: 'Wash log not found' });
+
+    // Step 2: If it's not additional and has a valid subscription, revert quota
+    if (!log.isAdditional && log.subscriptionId && log.type) {
+      const subscription = await Subscription.findById(log.subscriptionId);
+      if (subscription) {
+        const currentUsage = subscription.washesUsed[log.type] || 0;
+        const revertField = `washesUsed.${log.type}`;
+
+        // Revert only if usage is greater than 0
+        if (currentUsage > 0) {
+          await Subscription.findByIdAndUpdate(log.subscriptionId, {
+            $inc: { [revertField]: -1 }
+          });
+        }
+
+        // After decrement, re-fetch updated subscription
+        const updatedSub = await Subscription.findById(log.subscriptionId);
+
+        // Check if all usage fields are within limits to reactivate the subscription
+        let isActive = true;
+        for (const type in updatedSub.quota) {
+          const used = updatedSub.washesUsed[type] || 0;
+          const allowed = updatedSub.quota[type] || 0;
+          if (used >= allowed) {
+            isActive = false;
+            break;
+          }
+        }
+
+        // If status was expired and usage is now within limits, set status to 'active'
+        if (updatedSub.status === 'expired' && isActive) {
+          updatedSub.status = 'active';
+          await updatedSub.save();
+        }
       }
-      res.json({ message: 'WashLog deleted successfully' });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
     }
-  });
-  
-  // PUT /washlogs/:id
-  router.put('/:id', async (req, res) => {
-    try {
-      const logId = req.params.id;
-      const {
+
+    // Step 3: Delete the log
+    await WashLog.findByIdAndDelete(washLogId);
+
+    res.status(200).json({
+      message: 'Wash log deleted successfully. Quota reverted and subscription status updated if applicable.',
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+// PUT /washlogs/:id
+router.put('/:id', async (req, res) => {
+  try {
+    const washLogId = req.params.id;
+    const {
+      type,
+      subscriptionId,
+      apartmentId,
+      customerId,
+      vehicleId,
+      description,
+      isAdditional: newIsAdditional = false,
+      additionalCharge = 0,
+      reduceQuota = true,
+    } = req.body;
+
+    const existingLog = await WashLog.findById(washLogId);
+    if (!existingLog) return res.status(404).json({ error: 'Wash log not found' });
+
+    const subscription = subscriptionId ? await Subscription.findById(subscriptionId) : null;
+    if (subscriptionId && !subscription) return res.status(404).json({ error: 'Subscription not found' });
+
+    const plan = subscription ? await Plan.findById(subscription.planId) : null;
+    if (subscription && !plan) return res.status(404).json({ error: 'Plan not found' });
+
+    // Step 1: Revert quota if old entry was NOT additional
+    if (existingLog.subscriptionId && !existingLog.isAdditional) {
+      const revertField = `washesUsed.${existingLog.type}`;
+      const currentUsage = subscription.washesUsed[existingLog.type] || 0;
+
+      if (currentUsage > 0) {
+        await Subscription.findByIdAndUpdate(subscription._id, {
+          $inc: { [revertField]: -1 }
+        });
+      }
+    }
+
+    let finalIsAdditional = false;
+    let finalAdditionalCharge = 0;
+
+    // Step 2: Recompute based on new data
+    if (newIsAdditional) {
+      finalIsAdditional = true;
+      finalAdditionalCharge = additionalCharge || 0;
+    } else if (reduceQuota && subscription && plan) {
+      const used = subscription.washesUsed[type] || 0;
+      const quota = plan.washQuota[type] || 0;
+
+      if (used >= quota) {
+        finalIsAdditional = true;
+        finalAdditionalCharge = additionalCharge || 0;
+      } else {
+        const updateField = `washesUsed.${type}`;
+        await Subscription.findByIdAndUpdate(subscription._id, {
+          $inc: { [updateField]: 1 }
+        });
+
+        // Optionally expire subscription if all quotas are used
+        const updated = await Subscription.findById(subscription._id);
+        const foamUsed = updated.washesUsed.foam || 0;
+        const foamQuota = plan.washQuota.foam || 0;
+        const normalUsed = updated.washesUsed.normal || 0;
+        const normalQuota = plan.washQuota.normal || 0;
+
+        if (foamUsed >= foamQuota && normalUsed >= normalQuota && updated.status !== 'expired') {
+          updated.status = 'expired';
+          await updated.save();
+        }
+      }
+    } else {
+      finalIsAdditional = true;
+      finalAdditionalCharge = additionalCharge || 0;
+    }
+
+    // Step 3: Update the wash log
+    const updatedLog = await WashLog.findByIdAndUpdate(
+      washLogId,
+      {
         type,
         subscriptionId,
         apartmentId,
         customerId,
+        vehicleId: vehicleId || null,
         description,
-        vehicleId,
-        reduceQuota = true,
-        isAdditional: forceAdditional = false,
-        additionalCharge = 0
-      } = req.body;
-  
-      const oldLog = await WashLog.findById(logId);
-      if (!oldLog) return res.status(404).json({ error: 'Wash log not found' });
-  
-      let originalSubscription, originalPlan;
-      if (oldLog.subscriptionId) {
-        originalSubscription = await Subscription.findById(oldLog.subscriptionId);
-        if (originalSubscription) {
-          originalPlan = await Plan.findById(originalSubscription.planId);
-        }
-      }
-  
-      // Revert quota from original log
-      if (
-        originalSubscription &&
-        oldLog.subscriptionId &&
-        !oldLog.isAdditional &&
-        originalPlan
-      ) {
-        const revertField = `washesUsed.${oldLog.type}`;
-        await Subscription.findByIdAndUpdate(oldLog.subscriptionId, {
-          $inc: { [revertField]: -1 }
-        });
-      }
-  
-      // Now process new update
-      let subscription, plan;
-      if (subscriptionId) {
-        subscription = await Subscription.findById(subscriptionId);
-        if (!subscription) return res.status(404).json({ error: 'Subscription not found' });
-  
-        plan = await Plan.findById(subscription.planId);
-        if (!plan) return res.status(404).json({ error: 'Plan not found' });
-      }
-  
-      const apartment = await Apartment.findById(apartmentId);
-      if (!apartment) return res.status(404).json({ error: 'Apartment not found' });
-  
-      if (vehicleId) {
-        const vehicle = await Vehicle.findById(vehicleId);
-        if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
-      }
-  
-      let isAdditional = false;
-      let finalAdditionalCharge = 0;
-  
-      if (forceAdditional) {
-        isAdditional = true;
-        finalAdditionalCharge = additionalCharge || 0;
-  
-      } else if (reduceQuota && subscription && plan) {
-        const used = subscription.washesUsed[type] || 0;
-        const quota = plan.washQuota[type] || 0;
-  
-        if (used >= quota) {
-          isAdditional = true;
-          finalAdditionalCharge = additionalCharge || 0;
-        } else {
-          // Deduct usage
-          const updateField = `washesUsed.${type}`;
-          await Subscription.findByIdAndUpdate(subscriptionId, {
-            $inc: { [updateField]: 1 }
-          });
-  
-          // Re-check subscription expiry logic
-          const updatedSub = await Subscription.findById(subscriptionId);
-          const foamUsed = updatedSub.washesUsed.foam || 0;
-          const foamQuota = plan.washQuota.foam || 0;
-          const normalUsed = updatedSub.washesUsed.normal || 0;
-          const normalQuota = plan.washQuota.normal || 0;
-  
-          if (
-            foamUsed >= foamQuota &&
-            normalUsed >= normalQuota &&
-            updatedSub.status !== 'expired'
-          ) {
-            updatedSub.status = 'expired';
-            await updatedSub.save();
-          } else if (
-            (foamUsed < foamQuota || normalUsed < normalQuota) &&
-            updatedSub.status === 'expired'
-          ) {
-            // OPTIONAL: Reactivate expired subscription if we reverted usage
-            updatedSub.status = 'active';
-            await updatedSub.save();
-          }
-        }
-  
-      } else {
-        isAdditional = true;
-        finalAdditionalCharge = additionalCharge || 0;
-      }
-  
-      // Update wash log
-      const updated = await WashLog.findByIdAndUpdate(
-        logId,
-        {
-          customerId,
-          subscriptionId,
-          apartmentId,
-          vehicleId: vehicleId || null,
-          type,
-          isAdditional,
-          description,
-          additionalCharge: finalAdditionalCharge,
-          performedBy: req.user?._id ?? oldLog.performedBy,
-        },
-        { new: true }
-      );
-  
-      res.status(200).json(updated);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-  
-  
+        isAdditional: finalIsAdditional,
+        additionalCharge: finalAdditionalCharge
+      },
+      { new: true }
+    );
+
+    res.status(200).json(updatedLog);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;
