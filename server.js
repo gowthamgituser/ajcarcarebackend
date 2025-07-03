@@ -8,6 +8,7 @@ import planRoutes from './routes/plan.js';
 import vehicleRoutes from "./routes/vehicle.js";
 import subscriptionRoutes from "./routes/subscription.js"
 import washLogRoutes from "./routes/washLogs.js"
+import invoiceRoutes from "./routes/invoices.js"
 
 
 dotenv.config();
@@ -30,6 +31,7 @@ app.use('/plans', planRoutes);
 app.use("/vehicles", vehicleRoutes);
 app.use("/subscription", subscriptionRoutes);
 app.use("/washlog", washLogRoutes);
+app.use("/invoice", invoiceRoutes);
 
 
 
