@@ -130,22 +130,41 @@ router.get('/', async (req, res) => {
 // Get wash logs by apartment
 router.get('/apartment/:apartmentId', async (req, res) => {
   try {
-    const logs = await WashLog.find({ apartmentId: req.params.apartmentId })
-      .populate('customerId')
-      .sort({ createdAt: -1 }) // sort by latest createdAt
-      .lean(); // makes docs plain objects
+    const { apartmentId } = req.params;
+    const { startDate, endDate } = req.query;
 
-    // Process vehicleId manually
+    const filter = { apartmentId };
+
+    // Apply date range filter if both dates are provided
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // Ensure endDate includes the full day (23:59:59.999)
+      end.setHours(23, 59, 59, 999);
+
+      filter.createdAt = {
+        $gte: start,
+        $lte: end,
+      };
+    }
+
+    const logs = await WashLog.find(filter)
+      .populate('customerId')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Manually populate vehicleId
     const populatedLogs = await Promise.all(
       logs.map(async (log) => {
         if (mongoose.Types.ObjectId.isValid(log.vehicleId)) {
           try {
             const vehicle = await Vehicle.findById(log.vehicleId).lean();
             if (vehicle) {
-              log.vehicleId = vehicle; // replace with full vehicle object
+              log.vehicleId = vehicle;
             }
-          } catch (err) {
-            // fail silently; leave vehicleId as is
+          } catch (_) {
+            // silent fail
           }
         }
         return log;
@@ -157,6 +176,7 @@ router.get('/apartment/:apartmentId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Get wash logs by customer
 router.get('/customer/:customerId', async (req, res) => {
