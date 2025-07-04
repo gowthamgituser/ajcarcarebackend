@@ -5,6 +5,62 @@ import dayjs from 'dayjs';
 
 const router = express.Router();
 
+router.put('/reactivate', async (req, res) => {
+  try {
+    const { subscriptionIds } = req.body;
+
+    if (!Array.isArray(subscriptionIds) || subscriptionIds.length === 0) {
+      return res.status(400).json({ error: 'subscriptionIds must be a non-empty array' });
+    }
+
+    const result = await Subscription.updateMany(
+      { _id: { $in: subscriptionIds } },
+      {
+        $set: {
+          status: 'active',
+          'washesUsed.foam': 0,
+          'washesUsed.normal': 0,
+        }
+      }
+    );
+
+    res.json({
+      message: `${result.modifiedCount} subscription(s) reactivated.`,
+      updatedCount: result.modifiedCount
+    });
+  } catch (err) {
+    console.error('Error reactivating subscriptions:', err);
+    res.status(500).json({ error: 'Server error while reactivating subscriptions' });
+  }
+});
+
+// PUT /subscription/status
+router.put('/change-status', async (req, res) => {
+  try {
+    const { _id, status } = req.body;
+
+    if (!_id || !['active', 'expired'].includes(status)) {
+      return res.status(400).json({ error: 'Valid _id and status ("active" or "expired") are required.' });
+    }
+
+    const updated = await Subscription.findByIdAndUpdate(
+      _id,
+      { $set: { status } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Subscription not found.' });
+    }
+
+    res.json({ message: `Subscription status updated to "${status}"`, subscription: updated });
+  } catch (err) {
+    console.error('Error updating subscription status:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 // Create a new subscription
 router.post('/', async (req, res) => {
   try {
