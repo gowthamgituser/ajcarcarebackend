@@ -97,11 +97,35 @@ router.get('/apartment/:apartmentId', async (req, res) => {
       .populate('apartmentId')
       .populate('vehicleIds');
 
-    res.json(subs);
+    const totalSubscriptions = subs.length;
+    const planCounts = {};
+    const groupedSubscriptions = {};
+
+    subs.forEach((sub) => {
+      const planName = sub.planId?.name || 'Unknown Plan';
+
+      // Count per plan
+      planCounts[planName] = (planCounts[planName] || 0) + 1;
+
+      // Group list per plan
+      if (!groupedSubscriptions[planName]) {
+        groupedSubscriptions[planName] = [];
+      }
+      groupedSubscriptions[planName].push(sub);
+    });
+
+    res.json({
+      apartmentId,
+      totalSubscriptions,
+      planCounts,
+      groupedSubscriptions, // Object with planName -> array of subscriptions
+      subscriptions: subs,  // Full list (optional)
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 //Get Subscription bvased on VechileId
 router.get('/vehicle/:vehicleId', async (req, res) => {
