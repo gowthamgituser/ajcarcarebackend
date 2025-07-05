@@ -81,6 +81,7 @@ router.get('/apartment/:id', async (req, res) => {
         const status = statusEntry?.status || 'unpaid';
         const paymentDate = statusEntry?.paymentDate || null;
         const paymentUpdatedAt = statusEntry?.updatedAt || null;
+        const statusNotes = statusEntry?.notes || 'unpaid';
   
         invoices.push({
           invoiceId,
@@ -97,7 +98,8 @@ router.get('/apartment/:id', async (req, res) => {
           amount,
           paymentStatus: status,
           paymentDate,
-          paymentUpdatedAt
+          paymentUpdatedAt,
+          statusNotes
         });
       }
   
@@ -107,6 +109,79 @@ router.get('/apartment/:id', async (req, res) => {
       res.status(500).json({ error: err.message });
     }
   });
+
+  router.get('/customer/:customerId', async (req, res) => {
+    try {
+      const customerId = req.params.customerId;
+      const now = new Date();
+      const month = parseInt(req.query.month) || now.getMonth() + 1;
+      const year = parseInt(req.query.year) || now.getFullYear();
+  
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+  
+      const customer = await Customer.findById(customerId).lean();
+      if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  
+      const apartmentId = customer.apartmentId;
+  
+      const logs = await WashLogs.find({
+        customerId,
+        date: { $gte: startDate, $lte: endDate },
+      }).lean();
+  
+      const subscriptions = await Subscription.find({
+        customerId,
+      }).populate('planId', 'name price').lean();
+  
+      const paymentStatus = await PaymentStatus.findOne({
+        customerId,
+        apartmentId,
+        month,
+        year,
+      }).lean();
+  
+      const additionalLogs = logs.filter(log => log?.isAdditional);
+      const planTotal = subscriptions.reduce((sum, s) => sum + (s.planId?.price || 0), 0);
+      const additionalTotal = additionalLogs.reduce((sum, l) => sum + (l.additionalCharge || 0), 0);
+      const amount = planTotal + additionalTotal;
+  
+      const invoiceId = `INV-${year}${String(month).padStart(2, '0')}-${customer.phone}`;
+      const status = paymentStatus?.status || 'unpaid';
+      const paymentDate = paymentStatus?.paymentDate || null;
+      const paymentUpdatedAt = paymentStatus?.updatedAt || null;
+  
+      const response = {
+        invoiceId,
+        customerId,
+        apartmentId,
+        name: customer.name,
+        phone: customer.phone,
+        month,
+        year,
+        subscriptions: subscriptions.map(s => ({
+          _id: s._id,
+          planId: s.planId?._id,
+          planName: s.planId?.name,
+          planPrice: s.planId?.price,
+          createdAt: s.createdAt
+        })),
+        logs,
+        planTotal,
+        additionalTotal,
+        amount,
+        paymentStatus: status,
+        paymentDate,
+        paymentUpdatedAt
+      };
+  
+      res.json(response);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+  
   
 
 // PUT /payment-status/:customerId
