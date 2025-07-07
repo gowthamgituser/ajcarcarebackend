@@ -7,8 +7,9 @@ const paymentStatusSchema = new mongoose.Schema({
   month: { type: Number, required: true }, // 1-12
   year: { type: Number, required: true },
   notes: { type: String, default: '' }, 
-  status: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
+  status: { type: String, enum: ['paid', 'unpaid',], default: 'unpaid' },
   paymentDate: { type: Date, default: null },
+  amountPaid: { type: Number, default: 0 },
 }, { timestamps: true });
 
 paymentStatusSchema.index({ customerId: 1, month: 1, year: 1 }, { unique: true });

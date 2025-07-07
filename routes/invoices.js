@@ -82,6 +82,9 @@ router.get('/apartment/:id', async (req, res) => {
         const paymentDate = statusEntry?.paymentDate || null;
         const paymentUpdatedAt = statusEntry?.updatedAt || null;
         const statusNotes = statusEntry?.notes || 'unpaid';
+        const balance = statusEntry?.balance || null;
+        const amountDue = statusEntry?.amountDue || null;
+        const amountPaid = statusEntry?.amountPaid || null;
   
         invoices.push({
           invoiceId,
@@ -99,7 +102,10 @@ router.get('/apartment/:id', async (req, res) => {
           paymentStatus: status,
           paymentDate,
           paymentUpdatedAt,
-          statusNotes
+          statusNotes,
+          balance,
+          amountDue,
+          amountPaid
         });
       }
   
@@ -187,21 +193,22 @@ router.get('/apartment/:id', async (req, res) => {
 // PUT /payment-status/:customerId
 router.put('/payment-status/:customerId', async (req, res) => {
     const { customerId } = req.params;
-    const { month, year, status, apartmentId, notes } = req.body;
+    const { month, year, status, apartmentId, notes, amountPaid = 0 } = req.body;
   
     if (!['paid', 'unpaid'].includes(status)) {
       return res.status(400).json({ error: 'Invalid payment status' });
     }
   
-    if (!month || !year) {
-      return res.status(400).json({ error: 'Month and year are required' });
+    if (!month || !year || !apartmentId) {
+      return res.status(400).json({ error: 'Month, year, and apartmentId are required' });
     }
   
     try {
-      // Build update object conditionally
+
       const update = {
         status,
         notes,
+        amountPaid,
       };
   
       if (status === 'paid') {
@@ -219,7 +226,7 @@ router.put('/payment-status/:customerId', async (req, res) => {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  });
+  });  
   
 
   // GET /payment-status/:customerId
