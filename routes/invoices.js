@@ -3,6 +3,16 @@ import Customer from '../models/customer.js';
 import WashLogs from '../models/washLogs.js';
 import Subscription from '../models/subscription.js'
 import PaymentStatus from '../models/payment.js'
+import path from 'path';
+import puppeteer from 'puppeteer';
+import ejs from 'ejs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Recreate __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const router = express.Router();
 // GET /invoice/apartment/:id?month=7&year=2025// GET /invoice/apartment/:id?month=7&year=2025
 
@@ -188,6 +198,89 @@ router.get('/apartment/:id', async (req, res) => {
     }
   });
   
+  
+  router.get('/pdf/:customerId', async (req, res) => {
+    try {
+      const customerId = req.params.customerId;
+      const now = new Date();
+      const month = parseInt(req.query.month) || now.getMonth() + 1;
+      const year = parseInt(req.query.year) || now.getFullYear();
+  
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+  
+      const customer = await Customer.findById(customerId).lean();
+      if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  
+      const logs = await WashLogs.find({
+        customerId,
+        date: { $gte: startDate, $lte: endDate }
+      }).lean();
+  
+      const subscriptions = await Subscription.find({ customerId })
+        .populate('planId', 'name price')
+        .lean();
+  
+      const paymentStatusDoc = await PaymentStatus.findOne({
+        customerId,
+        apartmentId: customer.apartmentId,
+        month,
+        year
+      }).lean();
+  
+      const additionalLogs = logs.filter(log => log.isAdditional);
+      const planTotal = subscriptions.reduce((acc, sub) => acc + (sub.planId?.price || 0), 0);
+      const additionalTotal = additionalLogs.reduce((acc, log) => acc + (log.additionalCharge || 0), 0);
+      const amount = planTotal + additionalTotal;
+  
+      const invoiceId = `INV-${year}${String(month).padStart(2, '0')}-${customer.phone}`;
+  
+      const html = await ejs.renderFile(
+        path.join(__dirname, '../templates/invoice.ejs'),
+        {
+          invoiceId,
+          name: customer.name,
+          phone: customer.phone,
+          month,
+          year,
+          subscriptions: subscriptions.map(s => ({
+            planName: s.planId?.name,
+            planPrice: s.planId?.price
+          })),
+          logs,
+          amount,
+          planTotal,
+          additionalTotal,
+          paymentStatus: paymentStatusDoc?.status || 'unpaid',
+          paymentDate: paymentStatusDoc?.paymentDate
+        }
+      );
+  
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+  
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+  
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
+      });
+  
+      await browser.close();
+  
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${invoiceId}.pdf"`);
+      res.send(pdfBuffer);
+  
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      res.status(500).json({ error: 'Failed to generate invoice PDF' });
+    }
+  });  
   
 
 // PUT /payment-status/:customerId
