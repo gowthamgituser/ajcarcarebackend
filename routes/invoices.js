@@ -4,15 +4,14 @@ import WashLogs from '../models/washLogs.js';
 import Subscription from '../models/subscription.js'
 import PaymentStatus from '../models/payment.js'
 import path from 'path';
-import puppeteer from 'puppeteer';
 import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import puppeteer from 'puppeteer';
 
 // Recreate __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
 const router = express.Router();
 // GET /invoice/apartment/:id?month=7&year=2025// GET /invoice/apartment/:id?month=7&year=2025
@@ -259,8 +258,9 @@ router.get('/apartment/:id', async (req, res) => {
   
       const browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });      
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });         
   
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
