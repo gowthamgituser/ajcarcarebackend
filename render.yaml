@@ -4,10 +4,5 @@ services:
     runtime: node
     buildCommand: |
       npm install
-      npx puppeteer browsers install chrome
     startCommand: node server.js
-    envVars:
-      - key: PUPPETEER_CACHE_DIR
-        value: /tmp/puppeteer
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /tmp/puppeteer/chrome/linux-138.0.7204.94/chrome-linux64/chrome
+

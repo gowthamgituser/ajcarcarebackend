@@ -259,9 +259,8 @@ router.get('/apartment/:id', async (req, res) => {
   
       const browser = await puppeteer.launch({
         headless: 'new',
-        executablePath,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });      
   
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
