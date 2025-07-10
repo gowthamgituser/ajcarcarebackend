@@ -4,7 +4,8 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+  "postinstall": "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false node node_modules/puppeteer/install.js"
   },
   "keywords": [],
   "author": "",
