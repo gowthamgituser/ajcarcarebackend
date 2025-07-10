@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon server.js",
-  "postinstall": "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false node node_modules/puppeteer/install.js"
-  },
+"postinstall": "node node_modules/puppeteer/install.js"  },
   "keywords": [],
   "author": "",
   "license": "ISC",
