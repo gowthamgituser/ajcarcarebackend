@@ -7,7 +7,7 @@ import path from 'path';
 import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import puppeteer from 'puppeteer';
+import { Puppeteer } from 'puppeteer-core';
 
 // Recreate __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -255,12 +255,13 @@ router.get('/apartment/:id', async (req, res) => {
           paymentDate: paymentStatusDoc?.paymentDate
         }
       );
-  
-      const browser = await puppeteer.launch({
-        headless: 'new',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });         
+
+const browser = await Puppeteer.launch({
+  headless: 'new',
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+});
+     
   
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
