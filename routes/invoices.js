@@ -7,7 +7,7 @@ import path from 'path';
 import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { Puppeteer } from 'puppeteer-core';
+import puppeteer from 'puppeteer-core';
 
 // Recreate __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -256,7 +256,7 @@ router.get('/apartment/:id', async (req, res) => {
         }
       );
 
-const browser = await Puppeteer.launch({
+const browser = await puppeteer.launch({
   headless: 'new',
   executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
   args: ['--no-sandbox', '--disable-setuid-sandbox'],
