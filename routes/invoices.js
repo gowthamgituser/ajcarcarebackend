@@ -7,7 +7,7 @@ import path from 'path';
 import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import puppeteer from 'puppeteer';
+import pdf from 'html-pdf-node';
 
 // Recreate __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -197,8 +197,6 @@ router.get('/apartment/:id', async (req, res) => {
       res.status(500).json({ error: err.message });
     }
   });
-  
-  
   router.get('/pdf/:customerId', async (req, res) => {
     try {
       const customerId = req.params.customerId;
@@ -255,30 +253,21 @@ router.get('/apartment/:id', async (req, res) => {
           paymentDate: paymentStatusDoc?.paymentDate
         }
       );
-
-
-      const browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
-      
-     
   
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-  
-      const pdfBuffer = await page.pdf({
+      const file = { content: html };
+      const pdfBuffer = await pdf.generatePdf(file, {
         format: 'A4',
-        printBackground: true,
-        margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
+        margin: {
+          top: '20px',
+          bottom: '20px',
+          left: '20px',
+          right: '20px'
+        }
       });
-  
-      await browser.close();
   
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="${invoiceId}.pdf"`);
       res.send(pdfBuffer);
-  
     } catch (err) {
       console.error('PDF generation error:', err);
       res.status(500).json({ error: 'Failed to generate invoice PDF' });
