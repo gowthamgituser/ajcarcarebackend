@@ -19,7 +19,8 @@
     "html-pdf-node": "^1.0.8",
     "mongoose": "^8.15.1",
     "path": "^0.12.7",
-    "puppeteer": "^24.12.1"
+    "puppeteer": "^24.12.1",
+    "twilio": "^5.7.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

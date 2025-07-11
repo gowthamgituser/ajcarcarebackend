@@ -8,6 +8,8 @@ import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import pdf from 'html-pdf-node';
+import twilio from 'twilio';
+const client = new twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // Recreate __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +18,35 @@ const __dirname = dirname(__filename);
 const router = express.Router();
 // GET /invoice/apartment/:id?month=7&year=2025// GET /invoice/apartment/:id?month=7&year=2025
 
+router.post('/send-invoice/:customerId', async (req, res) => {
+  try {
+    const customerId = req.params.customerId;
+    const now = new Date();
+    const month = parseInt(req.query.month) || now.getMonth() + 1;
+    const year = parseInt(req.query.year) || now.getFullYear();
+
+    const customer = await Customer.findById(customerId).lean();
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    if (!customer.phone.startsWith('+')) {
+      return res.status(400).json({ error: 'Phone number must be in E.164 format (e.g. +91XXXXXXXXXX)' });
+    }
+
+    const invoiceUrl = `${req.protocol}://${req.get('host')}/invoice/pdf/${customerId}?month=${month}&year=${year}`;
+
+    const message = await client.messages.create({
+      from: process.env.TWILIO_WHATSAPP_NUMBER,
+      to: `whatsapp:${customer.phone}`,
+      body: `Hello ${customer.name}, your invoice for ${month}/${year} is ready. Tap below to view the invoice.`,
+      mediaUrl: [invoiceUrl]
+    });
+
+    res.json({ success: true, sid: message.sid });
+  } catch (err) {
+    console.error('WhatsApp send error:', err);
+    res.status(500).json({ error: 'Failed to send invoice via WhatsApp' });
+  }
+});
 router.get('/apartment/:id', async (req, res) => {
     try {
       const apartmentId = req.params.id;
@@ -332,8 +363,6 @@ router.get('/payment-status/:customerId', async (req, res) => {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  });
-  
-  
+  });  
 
 export default router;
