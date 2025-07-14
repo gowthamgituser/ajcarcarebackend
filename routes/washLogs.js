@@ -18,7 +18,8 @@ router.post('/', async (req, res) => {
       vehicleId,
       reduceQuota = true,
       isAdditional: forceAdditional = false,
-      additionalCharge = 0
+      additionalCharge = 0,
+      createdAt // ✅ allow optional createdAt timestamp
     } = req.body;
 
     // Fetch subscription
@@ -38,12 +39,6 @@ router.post('/', async (req, res) => {
       plan = await Plan.findById(subscription.planId);
       if (!plan) return res.status(404).json({ error: 'Plan not found' });
     }
-
-    // Optional vehicle check
-    // if (vehicleId) {
-    //   const vehicle = await Vehicle.findById(vehicleId);
-    //   if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
-    // }
 
     let isAdditional = false;
     let finalAdditionalCharge = 0;
@@ -90,7 +85,6 @@ router.post('/', async (req, res) => {
       finalAdditionalCharge = additionalCharge || 0;
     }
 
-    // Create the wash log
     const washLog = new WashLog({
       customerId,
       subscriptionId,
@@ -100,7 +94,8 @@ router.post('/', async (req, res) => {
       isAdditional,
       description,
       additionalCharge: finalAdditionalCharge,
-      performedBy: req.user?._id // optional if you have auth
+      performedBy: req.user?._id, // optional if you have auth
+      ...(createdAt && { createdAt: new Date(createdAt) }) // <-- inject if provided
     });
 
     const saved = await washLog.save();

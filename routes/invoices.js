@@ -116,7 +116,10 @@ router.get('/apartment/:id', async (req, res) => {
         const additionalTotal = additionalLogs.reduce((sum, l) => sum + (l.additionalCharge || 0), 0);
         const amount = planTotal + additionalTotal;
   
-        const invoiceId = `INV-${year}${String(month).padStart(2, '0')}-${customer.phone}`;
+        const namePart = customer.name?.slice(0,3).toUpperCase() || 'XXX';
+        const phonePart = customer.phone?.slice(0, 3) || '000';
+        const invoiceId = `INV-${year}-${namePart}${phonePart}`;
+        
         
         const statusEntry = statusMap.get(custId);
         const status = statusEntry?.status || 'unpaid';
@@ -193,7 +196,9 @@ router.get('/apartment/:id', async (req, res) => {
       const additionalTotal = additionalLogs.reduce((sum, l) => sum + (l.additionalCharge || 0), 0);
       const amount = planTotal + additionalTotal;
   
-      const invoiceId = `INV-${year}${String(month).padStart(2, '0')}-${customer.phone}`;
+      const namePart = customer.name?.slice(0,3).toUpperCase() || 'XXX';
+      const phonePart = customer.phone?.slice(0, 3) || '000';
+      const invoiceId = `INV-${year}-${namePart}${phonePart}`;
       const status = paymentStatus?.status || 'unpaid';
       const paymentDate = paymentStatus?.paymentDate || null;
       const paymentUpdatedAt = paymentStatus?.updatedAt || null;
@@ -262,7 +267,9 @@ router.get('/apartment/:id', async (req, res) => {
       const additionalTotal = additionalLogs.reduce((acc, log) => acc + (log.additionalCharge || 0), 0);
       const amount = planTotal + additionalTotal;
   
-      const invoiceId = `INV-${year}${String(month).padStart(2, '0')}-${customer.phone}`;
+      const namePart = customer.name?.slice(0,3).toUpperCase() || 'XXX';
+      const phonePart = customer.phone?.slice(0, 3) || '000';
+      const invoiceId = `INV-${year}-${namePart}${phonePart}`;
   
       const html = await ejs.renderFile(
         path.join(__dirname, '../templates/invoice.ejs'),
